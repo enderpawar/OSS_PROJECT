@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import AssetPage from './components/AssetPage';
 import LogicEditorPage from './components/LogicEditorPage';
 import { getMyAssetsWithKeys } from './communicator/upbit_api';
-import { getAllRunningLogics, stopLogic } from './logic_interpreter/logic_runner';
+import { unifiedAPI } from './communicator/unified_api';
 
 // ----------------------------------------------------------------
 // App: 페이지 라우팅을 담당하는 메인 컴포넌트
@@ -30,70 +30,52 @@ const App = () => {
 
   // 데이터 로딩 및 초기화
   useEffect(() => {
-    // 초기 테마 설정: Electron Store > 시스템 선호
-    (async () => {
-      try {
-        // @ts-ignore
-        if (window.electronAPI && window.electronAPI.getTheme) {
-          // @ts-ignore
-          const saved = await window.electronAPI.getTheme();
-          if (saved === 'light' || saved === 'dark') {
-            setTheme(saved);
-          } else {
-            const preferDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            setTheme(preferDark ? 'dark' : 'light');
-          }
-        }
-      } catch {}
-    })();
+    // 초기 테마 설정
+    const preferDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setTheme(preferDark ? 'dark' : 'light');
 
-    // --- 데모를 위한 기본 데이터 생성 ---
-    const bootstrapLogics = async () => {
+    // 로컬 스토리지에서 로직 목록 로드
+    const bootstrapLogics = () => {
       try {
-        // @ts-ignore
-        if (!window.electronAPI || !window.electronAPI.listLogics) {
-          console.error('Electron API가 필요합니다.');
+        const savedLogics = localStorage.getItem('userLogics');
+        if (savedLogics) {
+          const logicList = JSON.parse(savedLogics);
+          setLogics(logicList.map(l => ({
+            id: l.id,
+            name: l.name,
+            stock: l.stock,
+            order: l.order || 0
+          })));
+        } else {
           setLogics([]);
-          return;
         }
-        // @ts-ignore
-        const index = await window.electronAPI.listLogics();
-        setLogics(index || []);
-      } catch (e) {}
+      } catch (e) {
+        console.error('로직 목록 로드 실패:', e);
+        setLogics([]);
+      }
     };
     bootstrapLogics();
 
     const loadKeysAndFetchAssets = async () => {
       try {
-        // @ts-ignore
-        if (!window.electronAPI) {
-          setAssetsError('Electron 환경에서만 사용 가능합니다.');
-          setAssetsLoading(false);
-          return;
-        }
-
-        // --- 1단계: 저장된 API 키 불러오기 ---
-        console.log("1단계: 저장된 API 키를 불러옵니다.");
-        // @ts-ignore
-        const savedKeys = await window.electronAPI.loadApiKeys();
+        // 저장된 API 키 불러오기
+        const savedKeys = unifiedAPI.loadApiKeys();
 
         if (savedKeys && savedKeys.accessKey && savedKeys.secretKey) {
-          // --- 2단계: API 키가 있으면 자산 정보 가져오기 ---
-          console.log("2단계: 저장된 키를 찾았습니다. 자산 정보를 가져옵니다.");
+          console.log("저장된 API 키를 찾았습니다. 자산 정보를 가져옵니다.");
           setHasApiKeys(true);
 
           try {
             const data = await getMyAssetsWithKeys(savedKeys.accessKey, savedKeys.secretKey);
-            console.log("3단계: 자산 정보 조회 성공!", data);
+            console.log("자산 정보 조회 성공!", data);
             setAssets(data);
             setAssetsError(null);
           } catch (error) {
-            console.error("3단계 (실패): 자산 정보 조회 실패", error);
+            console.error("자산 정보 조회 실패:", error);
             setAssetsError('자산 정보를 불러오는 데 실패했습니다. API 키가 정확한지, IP 주소가 등록되었는지 확인해주세요.');
           }
         } else {
-          // --- 2단계 (실패): API 키가 없음 ---
-          console.log("2단계: 저장된 API 키가 없습니다. 설정이 필요합니다.");
+          console.log("저장된 API 키가 없습니다. 설정이 필요합니다.");
           setHasApiKeys(false);
           setShowApiKeySettings(true);
           setAssetsError('API 키가 설정되지 않았습니다. 설정 버튼을 눌러 키를 입력해주세요.');
@@ -109,26 +91,31 @@ const App = () => {
     loadKeysAndFetchAssets();
   }, []);
 
-  // 실행 중인 로직 상태를 주기적으로 동기화
+  // 실행 중인 로직 상태를 주기적으로 동기화 (Python 백엔드)
   useEffect(() => {
-    const syncInterval = setInterval(() => {
-      const running = getAllRunningLogics();
-      setRunningLogics(running);
+    const syncInterval = setInterval(async () => {
+      try {
+        const result = await unifiedAPI.getRunningLogics();
+        if (result.success && result.data) {
+          setRunningLogics(result.data);
+        }
+      } catch (error) {
+        console.error('실행 중인 로직 조회 실패:', error);
+      }
     }, 1000);
 
     return () => clearInterval(syncInterval);
   }, []);
 
-  // 테마를 documentElement에 반영 + Electron Store에 저장
+  // 테마를 documentElement에 반영
   useEffect(() => {
     try {
       document.documentElement.setAttribute('data-theme', theme);
-      // @ts-ignore
-      if (window.electronAPI && window.electronAPI.setTheme) {
-        // @ts-ignore
-        window.electronAPI.setTheme(theme);
-      }
-    } catch {}
+      // localStorage에 테마 저장
+      localStorage.setItem('theme', theme);
+    } catch (error) {
+      console.error('Failed to save theme:', error);
+    }
   }, [theme]);
 
   const handleLogicClick = (logicId) => {
@@ -150,11 +137,23 @@ const App = () => {
     
   const handleSaveLogic = async (updatedLogic) => {
     try {
-      // @ts-ignore
-      if (!window.electronAPI || !window.electronAPI.saveLogic) return;
-      // @ts-ignore
-      await window.electronAPI.saveLogic(updatedLogic);
-      // 전체 재조회 없이 국소 업데이트로 메타 반영 (이름/종목 등)
+      // 로컬 스토리지에 로직 저장
+      const savedLogics = localStorage.getItem('userLogics');
+      const logicList = savedLogics ? JSON.parse(savedLogics) : [];
+      
+      const existingIndex = logicList.findIndex(l => l.id === updatedLogic.id);
+      
+      if (existingIndex >= 0) {
+        // 기존 로직 업데이트
+        logicList[existingIndex] = updatedLogic;
+      } else {
+        // 새 로직 추가
+        logicList.push(updatedLogic);
+      }
+      
+      localStorage.setItem('userLogics', JSON.stringify(logicList));
+      
+      // 메타 정보 업데이트
       setLogics((prev) =>
         prev.map((l) =>
           l.id === updatedLogic.id
@@ -162,19 +161,40 @@ const App = () => {
             : l
         )
       );
-    } catch {}
+      
+      // 새 로직인 경우 목록에 추가
+      if (existingIndex < 0) {
+        setLogics((prev) => [
+          ...prev,
+          {
+            id: updatedLogic.id,
+            name: updatedLogic.name,
+            stock: updatedLogic.stock,
+            order: updatedLogic.order || prev.length
+          }
+        ]);
+      }
+    } catch (error) {
+      console.error('로직 저장 실패:', error);
+    }
   };
 
   const handleDeleteLogic = async (logicIdToDelete) => {
     try {
-      // 낙관적 업데이트로 즉시 UI 반영하고, 이후 비동기 저장
-      setLogics((prev)=> prev.filter((l)=> l.id !== logicIdToDelete));
-      // @ts-ignore
-      if (!window.electronAPI || !window.electronAPI.deleteLogic) return;
-      // @ts-ignore
-      await window.electronAPI.deleteLogic(logicIdToDelete);
-    } catch {}
-    console.log('로직이 삭제되었습니다.');
+      // 로컬 스토리지에서 로직 삭제
+      const savedLogics = localStorage.getItem('userLogics');
+      if (savedLogics) {
+        const logicList = JSON.parse(savedLogics);
+        const updatedList = logicList.filter(l => l.id !== logicIdToDelete);
+        localStorage.setItem('userLogics', JSON.stringify(updatedList));
+      }
+      
+      // UI 업데이트
+      setLogics((prev) => prev.filter((l) => l.id !== logicIdToDelete));
+      console.log('로직이 삭제되었습니다.');
+    } catch (error) {
+      console.error('로직 삭제 실패:', error);
+    }
   };
 
   /**
@@ -208,14 +228,8 @@ const App = () => {
     setAssetsError(null);
 
     try {
-      // @ts-ignore
-      if (!window.electronAPI) {
-        throw new Error('Electron 환경에서만 사용 가능합니다.');
-      }
-
       // 저장된 API 키 불러오기
-      // @ts-ignore
-      const savedKeys = await window.electronAPI.loadApiKeys();
+      const savedKeys = await unifiedAPI.loadApiKeys();
 
       if (!savedKeys || !savedKeys.accessKey || !savedKeys.secretKey) {
         setAssetsError('저장된 API 키가 없습니다. API 키를 먼저 설정해주세요.');
@@ -239,8 +253,15 @@ const App = () => {
   /**
    * 로직 실행 중지 핸들러
    */
-  const handleStopLogic = (logicId) => {
-    stopLogic(logicId);
+  const handleStopLogic = async (logicId) => {
+    try {
+      await unifiedAPI.stopLogic(logicId);
+      // 중지 후 running logics 상태 동기화
+      const running = await unifiedAPI.getRunningLogics();
+      setRunningLogics(running);
+    } catch (error) {
+      console.error('Failed to stop logic:', error);
+    }
   };
 
   return (
@@ -284,26 +305,31 @@ const App = () => {
             // 임시 항목이 있으면 저장하지 않음
             if (items.some((i)=> i && i._temp)) return;
             try {
-              // @ts-ignore
-              if (window.electronAPI && window.electronAPI.reorderLogics) {
-                const ids = items.map((i)=> i.id);
-                // @ts-ignore
-                await window.electronAPI.reorderLogics(ids);
-              }
-            } catch {}
+              // localStorage에 재정렬된 순서 저장
+              localStorage.setItem('userLogics', JSON.stringify(items));
+            } catch (error) {
+              console.error('Failed to save reordered logics:', error);
+            }
           }}
           onCreateLogic={async (name)=>{
             try {
-              // @ts-ignore
-              if (window.electronAPI && window.electronAPI.createLogic) {
-                // @ts-ignore
-                const meta = await window.electronAPI.createLogic(name);
-                // 인덱스 전체 재조회 없이 새 항목만 말단에 추가
-                if (meta && meta.id) {
-                  setLogics((prev)=> [...prev, meta]);
-                }
-              }
-            } catch {}
+              // 새 로직 생성
+              const newLogic = {
+                id: `logic_${Date.now()}`,
+                name: name,
+                createdAt: new Date().toISOString(),
+                data: null
+              };
+              
+              // 로직 목록에 추가
+              const updatedLogics = [...logics, newLogic];
+              setLogics(updatedLogics);
+              
+              // localStorage에 저장
+              localStorage.setItem('userLogics', JSON.stringify(updatedLogics));
+            } catch (error) {
+              console.error('Failed to create logic:', error);
+            }
           }}
           onRefreshAssets={handleRefreshAssets}
           onOpenApiKeySettings={() => setShowApiKeySettings(true)}
