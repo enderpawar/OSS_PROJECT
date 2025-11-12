@@ -174,13 +174,6 @@ class LogicRunnerManager {
                 }
                 break;
 
-            case 'rl-request':
-                // Worker에서 온 RL 요청 처리
-                if (running) {
-                    this.handleRLRequest(running.worker, data);
-                }
-                break;
-
             case 'started':
                 if (callback) {
                     callback("System", `로직 실행 시작됨 (${data.interval}ms 간격)`);
@@ -239,41 +232,6 @@ class LogicRunnerManager {
             // 에러 응답 전송
             worker.postMessage({
                 type: 'api-response',
-                requestId,
-                success: false,
-                error: error.message
-            });
-        }
-    }
-
-    /**
-     * Worker에서 온 RL 요청 처리
-     */
-    private async handleRLRequest(worker: Worker, data: any) {
-        const { requestId, data: rlData } = data;
-
-        try {
-            // 메인 스레드의 RLConnection을 가져와서 요청 전송
-            const { getGlobalRLConnection } = await import('../communicator/RLConnection');
-            const rlConnection = getGlobalRLConnection();
-            
-            if (!rlConnection) {
-                throw new Error('RLConnection is not initialized');
-            }
-
-            const result = await rlConnection.send(rlData);
-
-            // 성공 응답 전송
-            worker.postMessage({
-                type: 'rl-response',
-                requestId,
-                success: true,
-                result
-            });
-        } catch (error: any) {
-            // 에러 응답 전송
-            worker.postMessage({
-                type: 'rl-response',
                 requestId,
                 success: false,
                 error: error.message
