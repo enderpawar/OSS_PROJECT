@@ -1,7 +1,47 @@
 import { Indicators } from '@ixjb94/indicators';
-import { APIManager } from './api_manager';
 
 const ta = new Indicators();
+
+/**
+ * 간단한 데이터 관리 클래스
+ * API 호출을 통해 가격 데이터를 관리
+ */
+export class DataManager {
+    stock: string;
+    private priceData: number[] = [];
+    private highestPrices: Map<string, number> = new Map();
+
+    constructor(stock: string) {
+        this.stock = stock;
+    }
+
+    async waitUntilReady() {
+        // 캔들 데이터 초기 로드
+        const { unifiedAPI } = await import('../communicator/unified_api');
+        const candles = await unifiedAPI.fetchCandles(this.stock, 1, 200);
+        if (candles.data) {
+            this.priceData = candles.data.map((c: any) => c.trade_price);
+        }
+    }
+
+    async setReadyHighestPrice(periodUnit: string, periodLength: number) {
+        const { unifiedAPI } = await import('../communicator/unified_api');
+        const highest = await unifiedAPI.getHighestPrice(this.stock, periodUnit, periodLength);
+        this.highestPrices.set(`${periodUnit}-${periodLength}`, highest);
+    }
+
+    getLatestPrice(): number {
+        return this.priceData[this.priceData.length - 1] || 0;
+    }
+
+    getHighestPrice(key: string): number {
+        return this.highestPrices.get(key) || 0;
+    }
+
+    getPriceDataArray(): number[] {
+        return this.priceData;
+    }
+}
 
 export interface AST {
     evaluate(): Promise<number | boolean>;
@@ -9,9 +49,9 @@ export interface AST {
 }
 
 export abstract class SupplierAST implements AST {
-    manager: APIManager;
+    manager: DataManager;
 
-    constructor(manager: APIManager) {
+    constructor(manager: DataManager) {
         this.manager = manager;
     }
 
@@ -36,7 +76,7 @@ export class ConstantAST implements AST {
 }
 
 export class CurrentPriceAST extends SupplierAST {
-    constructor(manager: APIManager) {
+    constructor(manager: DataManager) {
         super(manager);
     }
     async calcValue() {
@@ -59,7 +99,7 @@ export class HighestPriceAST extends SupplierAST {
     periodUnit: string;
     private isReady: boolean = false;
 
-    constructor(manager: APIManager, periodLength: number, periodUnit: string) {
+    constructor(manager: DataManager, periodLength: number, periodUnit: string) {
         super(manager);
         this.periodLength = periodLength;
         this.periodUnit = periodUnit;
@@ -88,7 +128,7 @@ export class HighestPriceAST extends SupplierAST {
 }
 
 export class RsiAST extends SupplierAST {
-    constructor(manager: APIManager) {
+    constructor(manager: DataManager) {
         super(manager);
     }
     async calcValue() {
@@ -109,7 +149,7 @@ export class RsiAST extends SupplierAST {
 }
 
 export class RoiAST extends SupplierAST {
-    constructor(manager: APIManager) {
+    constructor(manager: DataManager) {
         super(manager);
     }
     async calcValue() {
@@ -130,7 +170,7 @@ export class RoiAST extends SupplierAST {
 export class SmaAST extends SupplierAST {
     period: number;
 
-    constructor(manager: APIManager, period: number) {
+    constructor(manager: DataManager, period: number) {
         super(manager);
         this.period = period;
     }

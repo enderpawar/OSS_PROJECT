@@ -1,6 +1,5 @@
 import type { AST } from "./ast";
-import {ConstantAST, CurrentPriceAST, HighestPriceAST, RsiAST, RoiAST, SmaAST, CompareAST, LogicOpAST} from "./ast";
-import {APIManager} from "./api_manager";
+import {ConstantAST, CurrentPriceAST, HighestPriceAST, RsiAST, RoiAST, SmaAST, CompareAST, LogicOpAST, DataManager} from "./ast";
 
 export class Interpreter {
     parseComplete: boolean = false;
@@ -15,7 +14,7 @@ export class Interpreter {
 
     log: ((title: string, msg: string) => void);
 
-    dataManager: APIManager;
+    dataManager: DataManager;
     
     // 주문 실행 핸들러 (Worker에서 오버라이드 가능)
     protected orderExecutor?: (action: 'buy' | 'sell', orderData: OrderData, stock: string) => Promise<void>;
@@ -24,7 +23,7 @@ export class Interpreter {
         this.stock = "KRW-BTC";
         this.log = logFunc || ((_a, _b) => {});
         this.orderExecutor = orderExecutor;
-        this.dataManager = new APIManager(this.stock);
+        this.dataManager = new DataManager(this.stock);
 
         this.logicID = null;
         this.buyRoot = null;
@@ -267,7 +266,7 @@ export class Interpreter {
     public setStock(stock: string) {
         this.stock = stock;
         if (this.stock != stock) {
-            this.dataManager = new APIManager(this.stock);
+            this.dataManager = new DataManager(this.stock);
         }
     }
 
