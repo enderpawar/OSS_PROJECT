@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useToast } from './toast/ToastProvider.jsx';
 import { useReteAppEditor } from '../hooks/useReteAppEditor';
 import { createNodeByKind, clientToWorld, exportGraph, importGraph } from '../rete/app-editor';
-import { runLogic, stopLogic } from '../logic_interpreter/logic_runner';
+import { unifiedAPI } from '../communicator/unified_api';
 import { Interpreter } from '../logic_interpreter/interpreter';
 
 // ----------------------------------------------------------------
@@ -256,32 +256,47 @@ const LogicEditorPage = ({ selectedLogicId, runningLogics, runIntervalSeconds, o
         }
     };
 
-    const handleStartLogic = useCallback(() => {
+    const handleStartLogic = useCallback(async () => {
         const buyGraph = exportGraph(buyEditorRef.current, buyAreaRef.current);
         const sellGraph = exportGraph(sellEditorRef.current, sellAreaRef.current);
         const logicData = { buyGraph, sellGraph };
         
         const logicId = selectedLogicId || `temp-logic-${Date.now()}`;
         
-        // appendLog 함수를 runLogic에 전달
-        const success = runLogic(
-            stock,
-            logicData,
-            appendLog,  // 로그 함수 전달
-            logRunDetailsRef.current,
-            logicId,
-            runIntervalSeconds * 1000 // 초를 밀리초로 변환
-        );
-        
-        if (success) {
-            appendLog("System", `로직 실행 시작 (${runIntervalSeconds}초 간격)`);
+        try {
+            // Python 백엔드에 로직 시작 요청
+            const result = await unifiedAPI.startLogic(
+                logicId,
+                stock,
+                logicData,
+                appendLog,  // 로그 함수 전달 (WebSocket으로 받음)
+                logRunDetailsRef.current,
+                runIntervalSeconds * 1000 // 초를 밀리초로 변환
+            );
+            
+            if (result.success) {
+                appendLog("System", `로직 실행 시작 (${runIntervalSeconds}초 간격)`);
+            } else {
+                appendLog("Error", `로직 시작 실패: ${result.error}`);
+            }
+        } catch (error) {
+            appendLog("Error", `로직 시작 오류: ${error.message}`);
         }
     }, [stock, appendLog, selectedLogicId, runIntervalSeconds, buyEditorRef, buyAreaRef, sellEditorRef, sellAreaRef]);
 
-    const handleStopLogic = useCallback(() => {
+    const handleStopLogic = useCallback(async () => {
         if (runningLogicId) {
-            onStopLogic(runningLogicId);
-            appendLog("System", "로직 실행 중지");
+            try {
+                const result = await unifiedAPI.stopLogic(runningLogicId);
+                if (result.success) {
+                    onStopLogic(runningLogicId);
+                    appendLog("System", "로직 실행 중지");
+                } else {
+                    appendLog("Error", `로직 중지 실패: ${result.error}`);
+                }
+            } catch (error) {
+                appendLog("Error", `로직 중지 오류: ${error.message}`);
+            }
         }
     }, [runningLogicId, onStopLogic, appendLog]);
 

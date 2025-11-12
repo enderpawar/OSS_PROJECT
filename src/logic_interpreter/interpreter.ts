@@ -1,5 +1,5 @@
 import type { AST } from "./ast";
-import {ConstantAST, CurrentPriceAST, HighestPriceAST, RsiAST, RoiAST, SmaAST, CompareAST, LogicOpAST, RLSignalAST} from "./ast";
+import {ConstantAST, CurrentPriceAST, HighestPriceAST, RsiAST, RoiAST, SmaAST, CompareAST, LogicOpAST} from "./ast";
 import {APIManager} from "./api_manager";
 
 export class Interpreter {
@@ -161,8 +161,6 @@ export class Interpreter {
                 return new HighestPriceAST(this.dataManager, tryParseInt(node.controls.periodLength), node.controls.periodUnit);
             case "rsi":
                 return new RsiAST(this.dataManager);
-            case "rl":
-                return new RLSignalAST(this.dataManager, isBuyGraph);
             case "sma":
                 const val = tryParseInt(node.controls.period);
                 if (val > 200) {

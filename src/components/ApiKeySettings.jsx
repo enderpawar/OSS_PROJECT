@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { unifiedAPI } from '../communicator/unified_api';
 
 /**
  * API 키 설정 컴포넌트
@@ -14,28 +15,18 @@ const ApiKeySettings = ({ onKeysSaved, logicId }) => {
   const [messageType, setMessageType] = useState(''); // 'success' or 'error'
   const [isValid, setIsValid] = useState(null); // null | true | false
 
-  // 저장된 키 프리필 + 최초 유효성 검사 (로직별 또는 전역)
+  // 저장된 키 프리필 + 최초 유효성 검사
   useEffect(() => {
     (async () => {
       try {
-        // @ts-ignore
-        if (!window.electronAPI) return;
-        let saved = null;
-        // @ts-ignore
-        if (logicId && window.electronAPI.loadLogicApiKeys) {
-          // @ts-ignore
-          saved = await window.electronAPI.loadLogicApiKeys(logicId);
-        } else {
-          // @ts-ignore
-          saved = await window.electronAPI.loadApiKeys();
-        }
+        const saved = unifiedAPI.loadApiKeys();
         if (saved && saved.accessKey && saved.secretKey) {
           setAccessKey(saved.accessKey);
           setSecretKey(saved.secretKey);
           await validateKeys(saved.accessKey, saved.secretKey);
         }
       } catch (e) {
-        // ignore
+        console.error('API 키 로드 실패:', e);
       }
     })();
   }, [logicId]);
@@ -48,12 +39,19 @@ const ApiKeySettings = ({ onKeysSaved, logicId }) => {
     try {
       setValidating(true);
       setMessage('');
-      // @ts-ignore
-      if (!window.electronAPI) throw new Error('Electron 환경에서만 사용 가능합니다.');
-      // @ts-ignore
-      await window.electronAPI.fetchUpbitAccounts(aKey, sKey);
-      setIsValid(true);
-      return true;
+      
+      // API 키 설정
+      await unifiedAPI.setApiKeys(aKey, sKey);
+      
+      // 계좌 조회로 유효성 검증
+      const result = await unifiedAPI.getAccounts();
+      if (result.success) {
+        setIsValid(true);
+        return true;
+      } else {
+        setIsValid(false);
+        return false;
+      }
     } catch (e) {
       setIsValid(false);
       return false;
@@ -78,31 +76,26 @@ const ApiKeySettings = ({ onKeysSaved, logicId }) => {
     setMessage('');
 
     try {
-      // @ts-ignore - window.electronAPI는 preload.js에서 노출됨
-      if (!window.electronAPI) {
-        throw new Error('Electron 환경에서만 사용 가능합니다.');
-      }
-      // API 키 저장 (로직별 또는 전역)
-      if (logicId && window.electronAPI.saveLogicApiKeys) {
-        // @ts-ignore
-        await window.electronAPI.saveLogicApiKeys(logicId, accessKey, secretKey);
-      } else {
-        // @ts-ignore
-        await window.electronAPI.saveApiKeys(accessKey, secretKey);
+      // 로컬 스토리지에 저장
+      unifiedAPI.saveApiKeys(accessKey, secretKey);
+      
+      // 백엔드에 API 키 설정
+      const result = await unifiedAPI.setApiKeys(accessKey, secretKey);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'API 키 설정 실패');
       }
 
       setMessage('API 키가 안전하게 저장되었습니다!');
       setMessageType('success');
 
-  // 저장 후 유효성 재검사
-  await validateKeys(accessKey, secretKey);
+      // 저장 후 유효성 재검사
+      await validateKeys(accessKey, secretKey);
 
-      // 부모 컴포넌트에 저장 완료 알림 (자산 정보 갱신용)
+      // 부모 컴포넌트에 저장 완료 알림
       if (onKeysSaved) {
         onKeysSaved(accessKey, secretKey, logicId || null);
       }
-
-      // 입력값 유지 요청이 있어 보안을 크게 해치지 않는 선에서 프리필 유지
     } catch (error) {
       console.error('API 키 저장 실패:', error);
       setMessage('API 키 저장에 실패했습니다: ' + error.message);

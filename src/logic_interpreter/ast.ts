@@ -1,6 +1,5 @@
 import { Indicators } from '@ixjb94/indicators';
 import { APIManager } from './api_manager';
-import { getGlobalRLConnection } from "../communicator/RLConnection.ts";
 
 const ta = new Indicators();
 
@@ -150,73 +149,6 @@ export class SmaAST extends SupplierAST {
         const value = await this.calcValue();
         log(`SMA(${this.period}) value: ${value.toFixed(2)}`);
         return value;
-    }
-}
-
-export class RLSignalAST extends SupplierAST {
-    isInitialized: boolean = false;
-    rlConnection: ReturnType<typeof getGlobalRLConnection>;
-    isBuyGraph: boolean = true;
-    
-    constructor(dataManager: APIManager, isBuyGraph: boolean) {
-        super(dataManager);
-        this.isBuyGraph = isBuyGraph;
-        this.rlConnection = getGlobalRLConnection();
-    }
-
-    async initializeRLServer(){
-        // RL 연결이 준비될 때까지 대기
-        if (!this.rlConnection) {
-            // Worker 환경에서는 자동으로 WorkerRLWrapper가 생성됨
-            this.rlConnection = getGlobalRLConnection();
-            
-            // 그래도 없으면 최대 5초 대기
-            let retries = 0;
-            while (!this.rlConnection && retries < 10) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                this.rlConnection = getGlobalRLConnection();
-                retries++;
-            }
-            
-            if (!this.rlConnection) {
-                throw new Error("RL connection is not available");
-            }
-        }
-        
-        const data = this.manager.getPriceDataArray();
-        await this.rlConnection.send({ action: "init", data: data.slice(0, 200) });
-        this.isInitialized = true;
-    }
-
-    async calcValue() {
-        if (!this.isInitialized) {
-            await this.initializeRLServer();
-        }
-        
-        if (!this.rlConnection) {
-            throw new Error("RL connection is not initialized");
-        }
-        
-        const response = await this.rlConnection.send({ action: "run", data: this.manager.getLatestPrice() });
-        
-        switch (response?.result?.action) {
-            case "BUY":
-                return this.isBuyGraph;
-            case "SELL":
-                return !this.isBuyGraph;
-            default:
-                return false;
-        }
-    }
-
-    async evaluate() {
-        return await this.calcValue();
-    }
-
-    async evaluateDetailed(log: (msg: string) => void) {
-        const v = await this.calcValue();
-        log(`RL signal: ${v}`);
-        return v;
     }
 }
 
