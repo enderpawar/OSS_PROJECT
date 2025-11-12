@@ -204,18 +204,15 @@ class LogicRunnerManager {
         const { requestId, method, params } = data;
 
         try {
-            const electronAPI = (window as any).electronAPI;
-            if (!electronAPI) {
-                throw new Error('electronAPI is not available');
-            }
+            const { unifiedAPI } = await import('../communicator/unified_api');
 
             let result: any;
             switch (method) {
                 case 'fetchCandles':
-                    result = await electronAPI.fetchCandles(...params);
+                    result = await unifiedAPI.fetchCandles(params[0], params[1], params[2]);
                     break;
                 case 'getHighestPrice':
-                    result = await electronAPI.getHighestPrice(...params);
+                    result = await unifiedAPI.getHighestPrice(params[0], params[1], params[2]);
                     break;
                 default:
                     throw new Error(`Unknown API method: ${method}`);
@@ -244,12 +241,13 @@ class LogicRunnerManager {
      */
     private async handleOrder(_logicId: string, orderData: any, logFunc: LogFunc) {
         const { action, orderType, stock, limitPrice, quantity } = orderData;
+        const { unifiedAPI } = await import('../communicator/unified_api');
         
         try {
             if (action === 'buy') {
                 if (orderType === 'market') {
                     logFunc("Buy", `시장가 ${quantity}₩어치 매수를 시도합니다.`);
-                    const result = await (window as any).electronAPI.marketBuy(stock, quantity);
+                    const result = await unifiedAPI.marketBuy(stock, quantity);
                     if (result.success) {
                         logFunc("Buy", `시장가 ${quantity}₩어치 매수 완료`);
                     } else {
@@ -257,7 +255,7 @@ class LogicRunnerManager {
                     }
                 } else {
                     logFunc("Buy", `지정가 ${limitPrice}₩에 ${quantity}₩어치 매수를 시도합니다.`);
-                    const result = await (window as any).electronAPI.limitBuyWithKRW(stock, limitPrice, quantity);
+                    const result = await unifiedAPI.limitBuyWithKRW(stock, limitPrice, quantity);
                     if (result.success) {
                         logFunc("Buy", `지정가 ${limitPrice}₩에 ${quantity}₩어치 매수 완료`);
                     } else {
@@ -267,7 +265,7 @@ class LogicRunnerManager {
             } else if (action === 'sell') {
                 if (orderType === 'market') {
                     logFunc("Sell", `시장가 ${quantity}₩어치 매도를 시도합니다.`);
-                    const result = await (window as any).electronAPI.marketSell(stock, quantity);
+                    const result = await unifiedAPI.marketSell(stock, quantity);
                     if (result.success) {
                         logFunc("Sell", `시장가 ${quantity}₩어치 매도 완료`);
                     } else {
@@ -275,7 +273,7 @@ class LogicRunnerManager {
                     }
                 } else {
                     logFunc("Sell", `지정가 ${limitPrice}₩에 ${quantity}₩어치 매도 시도`);
-                    const result = await (window as any).electronAPI.limitSellWithKRW(stock, limitPrice, quantity);
+                    const result = await unifiedAPI.limitSellWithKRW(stock, limitPrice, quantity);
                     if (result.success) {
                         logFunc("Sell", `지정가 ${limitPrice}₩에 ${quantity}₩어치 매도 완료`);
                     } else {

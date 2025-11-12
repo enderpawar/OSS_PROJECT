@@ -209,11 +209,12 @@ export class Interpreter {
             return;
         }
         
-        // 일반 환경에서는 window.electronAPI 사용
+        // unifiedAPI 사용
+        const { unifiedAPI } = await import('../communicator/unified_api');
+        
         if (this.buyOrderData.orderType === 'market') {
             log(`시장가 ${this.buyOrderData.quantity}₩어치 매수를 시도합니다.`);
-            // @ts-ignore
-            const result = await window.electronAPI.marketBuy(this.stock, this.buyOrderData.quantity);
+            const result = await unifiedAPI.marketBuy(this.stock, this.buyOrderData.quantity);
             if (result.success) {
                 log(`시장가 ${this.buyOrderData.quantity}₩어치 매수 완료`);
             } else {
@@ -222,8 +223,7 @@ export class Interpreter {
         }
         else {
             log(`지정가 ${this.buyOrderData.limitPrice}₩에 ${this.buyOrderData.quantity}₩어치 매수를 시도합니다.`);
-            // @ts-ignore
-            const result = await window.electronAPI.limitBuyWithKRW(this.stock, this.buyOrderData.limitPrice, this.buyOrderData.quantity);
+            const result = await unifiedAPI.limitBuyWithKRW(this.stock, this.buyOrderData.limitPrice, this.buyOrderData.quantity);
             if (result.success) {
                 log(`지정가 ${this.buyOrderData.limitPrice}₩에 ${this.buyOrderData.quantity}₩어치 매수 완료`);
             } else {
@@ -241,11 +241,12 @@ export class Interpreter {
             return;
         }
         
-        // 일반 환경에서는 window.electronAPI 사용
+        // unifiedAPI 사용
+        const { unifiedAPI } = await import('../communicator/unified_api');
+        
         if (this.sellOrderData.orderType === 'market') {
             log(`시장가 ${this.sellOrderData.quantity}₩어치 매도를 시도합니다.`);
-            // @ts-ignore
-            const result = await window.electronAPI.marketSell(this.stock, this.sellOrderData.quantity);
+            const result = await unifiedAPI.marketSell(this.stock, this.sellOrderData.quantity);
             if (result.success) {
                 log(`시장가 ${this.sellOrderData.quantity}₩어치 매도 완료`);
             } else {
@@ -254,8 +255,7 @@ export class Interpreter {
         }
         else {
             log(`지정가 ${this.sellOrderData.limitPrice}₩에 ${this.sellOrderData.quantity}₩어치 매도 시도`);
-            // @ts-ignore
-            const result = await window.electronAPI.limitSellWithKRW(this.stock, this.sellOrderData.limitPrice, this.sellOrderData.quantity);
+            const result = await unifiedAPI.limitSellWithKRW(this.stock, this.sellOrderData.limitPrice, this.sellOrderData.quantity);
             if (result.success) {
                 log(`지정가 ${this.sellOrderData.limitPrice}₩에 ${this.sellOrderData.quantity}₩어치 매도 완료`);
             } else {

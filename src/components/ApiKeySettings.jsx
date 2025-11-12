@@ -62,7 +62,7 @@ const ApiKeySettings = ({ onKeysSaved, logicId }) => {
 
   /**
    * API 키 저장 핸들러
-   * - 입력 검증 후 Electron Main Process에 저장 요청
+   * - 입력 검증 후 저장 요청
    */
   const handleSaveKeys = async () => {
     // 입력 검증

@@ -44,19 +44,16 @@ const LogicEditorPage = ({ selectedLogicId, runningLogics, runIntervalSeconds, o
         if (infoAreaRef.current) infoAreaRef.current.scrollTop = infoAreaRef.current.scrollHeight;
     }, [logs]);
 
-    // 초기 테마 동기화 (Electron Store > document > 시스템 선호)
+    // 초기 테마 동기화 (localStorage > document > 시스템 선호)
     useEffect(() => {
         (async () => {
             try {
-                // @ts-ignore
-                if (window.electronAPI && window.electronAPI.getTheme) {
-                    // @ts-ignore
-                    const saved = await window.electronAPI.getTheme();
-                    if (saved === 'light' || saved === 'dark') {
-                        setTheme(saved);
-                        document.documentElement.setAttribute('data-theme', saved);
-                        return;
-                    }
+                // localStorage에서 테마 불러오기
+                const saved = localStorage.getItem('theme');
+                if (saved === 'light' || saved === 'dark') {
+                    setTheme(saved);
+                    document.documentElement.setAttribute('data-theme', saved);
+                    return;
                 }
             } catch {}
             const htmlTheme = document.documentElement.getAttribute('data-theme');
@@ -98,12 +95,11 @@ const LogicEditorPage = ({ selectedLogicId, runningLogics, runIntervalSeconds, o
             const next = t === 'dark' ? 'light' : 'dark';
             try {
                 document.documentElement.setAttribute('data-theme', next);
-                // @ts-ignore
-                if (window.electronAPI && window.electronAPI.setTheme) {
-                    // @ts-ignore
-                    window.electronAPI.setTheme(next);
-                }
-            } catch {}
+                // localStorage에 테마 저장
+                localStorage.setItem('theme', next);
+            } catch (error) {
+                console.error('Failed to save theme:', error);
+            }
             return next;
         });
     }, []);
@@ -113,20 +109,19 @@ const LogicEditorPage = ({ selectedLogicId, runningLogics, runIntervalSeconds, o
         (async () => {
             if (selectedLogicId) {
                 try {
-                    // @ts-ignore
-                    if (window.electronAPI && window.electronAPI.loadLogic) {
-                        // @ts-ignore
-                        const current = await window.electronAPI.loadLogic(selectedLogicId);
-                        if (current) {
-                            setLogic(current);
-                            setLogicName(current.name || '');
-                            setExchange(current.exchange || 'Upbit');
-                            setStock(current.stock || '');
-                            return;
-                        }
+                    // localStorage에서 로직 불러오기
+                    const userLogics = JSON.parse(localStorage.getItem('userLogics') || '[]');
+                    const current = userLogics.find(l => l.id === selectedLogicId);
+                    if (current) {
+                        setLogic(current);
+                        setLogicName(current.name || '');
+                        setExchange(current.exchange || 'Upbit');
+                        setStock(current.stock || '');
+                        return;
                     }
-                } catch {}
-                // Electron 전용: 폴백 제거
+                } catch (error) {
+                    console.error('Failed to load logic:', error);
+                }
             } else {
                 setLogic(null);
                 setLogicName(defaultNewLogicName || '');
