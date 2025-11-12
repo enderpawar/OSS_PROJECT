@@ -8,12 +8,43 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import asyncio
 from datetime import datetime
+from contextlib import asynccontextmanager
 
 from upbit_api import UpbitAPI
 from logic_runner import LogicRunner
 
+# 전역 상태
+upbit_api: Optional[UpbitAPI] = None
+logic_runner: Optional[LogicRunner] = None
+websocket_connections: Dict[str, WebSocket] = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """애플리케이션 생명주기 관리"""
+    global upbit_api, logic_runner
+    
+    # 시작 시
+    upbit_api = UpbitAPI()
+    logic_runner = LogicRunner(upbit_api)
+    print("🚀 Trade Builder Backend starting...")
+    
+    yield
+    
+    # 종료 시
+    if logic_runner:
+        logic_runner.stop_all_logics()
+    if upbit_api:
+        await upbit_api.close()
+    print("👋 Trade Builder Backend shutting down...")
+
+
 # FastAPI 앱 생성
-app = FastAPI(title="Trade Builder Backend", version="1.0.0")
+app = FastAPI(
+    title="Trade Builder Backend",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # CORS 설정
 app.add_middleware(
@@ -23,11 +54,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 전역 상태
-upbit_api: Optional[UpbitAPI] = None
-logic_runner: Optional[LogicRunner] = None
-websocket_connections: Dict[str, WebSocket] = {}
 
 
 # Pydantic 모델들
@@ -72,26 +98,6 @@ class LimitOrderRequest(BaseModel):
 
 
 # API 엔드포인트들
-
-@app.on_event("startup")
-async def startup_event():
-    """서버 시작 시 초기화"""
-    global upbit_api, logic_runner
-    upbit_api = UpbitAPI()
-    logic_runner = LogicRunner(upbit_api)
-    print("🚀 Trade Builder Backend starting...")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """서버 종료 시 정리"""
-    global logic_runner, upbit_api
-    if logic_runner:
-        logic_runner.stop_all_logics()
-    if upbit_api:
-        await upbit_api.close()
-    print("👋 Trade Builder Backend shutting down...")
-
 
 @app.get("/")
 async def root():
